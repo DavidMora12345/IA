@@ -11,7 +11,7 @@ API REST **sin dependencias de pago** para tareas de:
 ## Requisitos
 - Windows 10/11
 - Python 3.13 (probado con `py --version`)
-- Sin GPU ni servicios externos obligatorios. **Opcional:** Ollama local.
+- Sin GPU ni servicios externos obligatorios. **Recomendado:** Ollama local para la generación.
 
 ## Instalación rápida en Windows (CMD)
 ```bat
@@ -23,7 +23,9 @@ py -3.13 -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-set ENGINE=rules
+REM Arranca Ollama en otro terminal: `ollama serve`
+set OLLAMA_BASE_URL=http://localhost:11434
+set ENGINE=ollama
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -37,7 +39,7 @@ runserver.bat
 ## .env (opcional)
 Crea `C:\ia-redacciones\.env` copiando desde `.env.example` y ajusta:
 ```
-ENGINE=rules
+ENGINE=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
 ```
@@ -97,4 +99,5 @@ app/
 ## Notas
 - La corrección ortográfica usa un diccionario general: revisa nombres propios.
 - Las métricas y la división de oraciones son aproximadas.
-- Si activas Ollama y estableces `ENGINE=ollama`, el endpoint `/v1/draft` usará el modelo configurado para generar borradores más ricos.
+- Con la configuración por defecto (`ENGINE=ollama`), el endpoint `/v1/draft` usa el modelo definido en `OLLAMA_MODEL` (por defecto `llama3.1:8b`).
+- Si prefieres las plantillas internas sin IA, cambia `ENGINE=rules`.

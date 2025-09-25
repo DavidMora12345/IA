@@ -23,14 +23,11 @@ def _rules_template(topic: str, tone: Tone, length: Length, language: str = "es"
     return "\n".join(lines)
 
 def draft(topic: str, tone: Tone = "neutral", length: Length = "medio", language: str = "es") -> str:
-    if settings.engine == "ollama" and settings.ollama_base_url:
-        try:
-            engine = OllamaEngine(settings.ollama_base_url, settings.ollama_model)
-            prompt = f"""Eres un redactor en {language}. Escribe un borrador sobre: '{topic}'.
-            Tono: {tone}. Longitud: {length}. Estructura con título, introducción, viñetas y cierre claro."""
-            return engine.generate(prompt)
-        except Exception:
-            # Fallback
-            return _rules_template(topic, tone, length, language)
-    else:
-        return _rules_template(topic, tone, length, language)
+    if settings.engine == "ollama":
+        if not settings.ollama_base_url:
+            raise RuntimeError("OLLAMA_BASE_URL no está configurada")
+        engine = OllamaEngine(settings.ollama_base_url, settings.ollama_model)
+        prompt = f"""Eres un redactor en {language}. Escribe un borrador sobre: '{topic}'.
+        Tono: {tone}. Longitud: {length}. Estructura con título, introducción, viñetas y cierre claro."""
+        return engine.generate(prompt)
+    return _rules_template(topic, tone, length, language)
