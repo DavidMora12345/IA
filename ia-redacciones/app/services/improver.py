@@ -1,77 +1,49 @@
 import re
 from typing import Dict, List
-from .spellcheck import correct_text
-from .tokenize import sentences
+from ..core.config import settings
+from ..engines.ollama import OllamaEngine
 
-_spaces_re = re.compile(r'\s+')
-_space_punct = [
-    (re.compile(r'\s+,\s*'), ', '),
-    (re.compile(r'\s+;\s*'), '; '),
-    (re.compile(r'\s+:\s*'), ': '),
-    (re.compile(r'\s+\.\s*'), '. '),
-    (re.compile(r'\s+\?\s*'), '? '),
-    (re.compile(r'\s+!\s*'), '! ')
-]
-_double_space = re.compile(r' {2,}')
+def _ollama_improve(text: str, language: str = "es") -> str:
+    """
+    Reescritura completa con Ollama: ortografía, gramática, puntuación y claridad.
+    Devuelve SOLO el texto reescrito.
+    """
+    if not settings.ollama_base_url or settings.engine != "ollama":
+        raise RuntimeError("Ollama no está configurado: ENGINE=ollama y OLLAMA_BASE_URL requeridos")
+    engine = OllamaEngine(settings.ollama_base_url, settings.ollama_model)
+    prompt = f"""Eres un corrector y editor experto en {language}.
+Reescribe el siguiente texto manteniendo el sentido y mejorando:
+- ortografía y gramática
+- puntuación y espacios
+- claridad y fluidez (divide oraciones largas si conviene)
+- evita voz pasiva cuando sea natural
+- respeta nombres propios, URLs, cifras y formato (conserva saltos de línea)
+- NO añadas ni inventes información
 
-_passive_re = re.compile(r'\b(es|son|fue|fueron|será|serán)\s+[a-záéíóúüñ]+(ado|ada|ados|adas|ido|ida|idos|idas)\b', re.IGNORECASE)
+Devuelve SOLO el texto reescrito, sin comillas ni explicaciones.
+
+TEXTO:
+{text}
+"""
+    return engine.generate(prompt).strip()
 
 def improve(text: str, language: str = "es") -> Dict[str, object]:
-    suggestions: List[Dict[str, str]] = []
-
-    # 1) Normalizar espacios
-    t = text.replace('\u00A0', ' ')
-    t = _double_space.sub(' ', t)
-
-    # 2) Espacios alrededor de puntuación
-    for patt, repl in _space_punct:
-        t2 = patt.sub(repl, t)
-        if t2 != t:
-            suggestions.append({"rule": "punctuation_spacing", "before": t, "after": t2})
-            t = t2
-
-    # 3) Dividir oraciones muy largas (>25 palabras)
-    sents = sentences(t)
-    new_sents: List[str] = []
-    for s in sents:
-        wc = len(s.split())
-        if wc > 25:
-            # Heurística: divide por ';' o ','
-            parts = re.split(r'(;|,)', s)
-            rebuilt = []
-            acc = ""
-            for p in parts:
-                if p in {',',';'}:
-                    acc += p
-                    continue
-                if not acc:
-                    acc = p.strip()
-                else:
-                    acc = (acc + " " + p.strip()).strip()
-                if len(acc.split()) >= 18:
-                    rebuilt.append(acc.strip().rstrip(',;'))
-                    acc = ""
-            if acc.strip():
-                rebuilt.append(acc.strip().rstrip(',;'))
-            if rebuilt:
-                suggestions.append({"rule":"split_long_sentence","original": s, "result": " ".join(x + "." for x in rebuilt)})
-                new_sents.extend(x.strip().rstrip('.') for x in rebuilt)
-            else:
-                new_sents.append(s)
-        else:
-            new_sents.append(s)
-    t = " ".join(s.strip().rstrip('.') + "." for s in new_sents) if new_sents else t
-
-    # 4) Voz pasiva (sugerencia)
-    if _passive_re.search(t):
-        suggestions.append({"rule":"avoid_passive_voice","message":"Considera reescribir construcciones pasivas ('ser' + participio) a voz activa."})
-
-    # 5) Corrección ortográfica al final
-    corr = correct_text(t, language=language)
-    if corr.get("corrections"):
-        suggestions.append({"rule":"spelling", "count": str(len(corr["corrections"]))})
-    t = corr["corrected_text"]
-
-    # 6) Consolidar espacios finales
-    t = _spaces_re.sub(lambda m: ' ' if '\n' not in m.group(0) else m.group(0), t).strip()
-    return {"improved_text": t, "suggestions": suggestions}
+    """
+    Modo SOLO OLLAMA: no aplica reglas locales ni pyspellchecker.
+    """
+    try:
+        improved = _ollama_improve(text, language=language)
+        return {
+            "improved_text": improved,
+            "suggestions": [
+                {"rule": "ollama_rewrite", "model": settings.ollama_model}
+            ]
+        }
+    except Exception as e:
+        # Fallback blando: devolvemos el original con aviso (sin reglas locales)
+        return {
+            "improved_text": text,
+            "suggestions": [
+                {"rule": "ollama_error", "message": str(e)}
+            ]
+        }
